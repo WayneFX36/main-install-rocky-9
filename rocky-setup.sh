@@ -9,13 +9,18 @@ echo "========================================="
 echo "Начало первоначальной настройки Rocky Linux"
 echo "========================================="
 
+# Функция для безопасного выполнения команд, которые могут завершиться ошибкой
+safe_run() {
+    "$@" || true
+}
+
 # 1. Настройка swap файла
 echo "1. Создание swap файла (2GB)..."
 
 # Проверяем, существует ли уже swap файл
 if [ -f /swapfile ]; then
     echo "Swap файл уже существует. Деактивируем текущий swap..."
-    swapoff /swapfile 2>/dev/null || true
+    safe_run swapoff /swapfile
     rm -f /swapfile
 fi
 
@@ -36,8 +41,10 @@ fi
 
 # 2. Настройка DNS
 echo "2. Настройка DNS серверов..."
-echo "nameserver 8.8.8.8" > /etc/resolv.conf
-echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+cat > /etc/resolv.conf << EOF
+nameserver 8.8.8.8
+nameserver 1.1.1.1
+EOF
 cat /etc/resolv.conf
 
 # 3. Обновление системы и установка базовых пакетов
@@ -50,8 +57,8 @@ dnf install -y nano vim net-tools htop wget curl firewalld crontabs \
 # 4. Установка Docker
 echo "4. Установка Docker..."
 # Удаление старых версий
-dnf remove -y docker docker-client docker-client-latest docker-common \
-    docker-latest docker-latest-logrotate docker-logrotate docker-engine 2>/dev/null || true
+safe_run dnf remove -y docker docker-client docker-client-latest docker-common \
+    docker-latest docker-latest-logrotate docker-logrotate docker-engine
 
 # Добавление репозитория Docker
 yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
@@ -62,6 +69,9 @@ dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker
 # Запуск Docker
 systemctl enable --now docker
 echo "Docker установлен и запущен"
+
+# Остальная часть скрипта такая же...
+# (продолжение вашего скрипта)
 
 # 5. Настройка Firewalld
 echo "5. Настройка Firewalld..."
