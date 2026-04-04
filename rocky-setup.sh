@@ -83,25 +83,25 @@ fi
 # 7. Настройка сетевых параметров
 echo "7. Настройка сетевых параметров..."
 
-add_sysctl_param() {
-    local param="$1"
-    local value="$2"
-    if grep -q "^$param" /etc/sysctl.conf; then
-        sed -i "s/^$param.*/$param = $value/" /etc/sysctl.conf
-        echo "Обновлен параметр: $param = $value"
+# Применяем параметры напрямую без функции
+for param in \
+    "net.core.default_qdisc = fq" \
+    "net.ipv4.tcp_congestion_control = bbr" \
+    "net.core.netdev_max_backlog = 65536" \
+    "net.core.somaxconn = 4096" \
+    "net.ipv4.tcp_fastopen = 3" \
+    "net.ipv4.tcp_max_syn_backlog = 4096" \
+    "net.ipv4.tcp_mtu_probing = 1"
+do
+    param_name=$(echo $param | cut -d'=' -f1 | sed 's/ $//')
+    if grep -q "^$param_name" /etc/sysctl.conf; then
+        sed -i "s/^$param_name.*/$param/" /etc/sysctl.conf
+        echo "Обновлен: $param"
     else
-        echo "$param = $value" >> /etc/sysctl.conf
-        echo "Добавлен параметр: $param = $value"
+        echo "$param" >> /etc/sysctl.conf
+        echo "Добавлен: $param"
     fi
-}
-
-add_sysctl_param "net.core.default_qdisc" "fq"
-add_sysctl_param "net.ipv4.tcp_congestion_control" "bbr"
-add_sysctl_param "net.core.netdev_max_backlog" "65536"
-add_sysctl_param "net.core.somaxconn" "4096"
-add_sysctl_param "net.ipv4.tcp_fastopen" "3"
-add_sysctl_param "net.ipv4.tcp_max_syn_backlog" "4096"
-add_sysctl_param "net.ipv4.tcp_mtu_probing" "1"
+done
 
 sysctl -p
 
