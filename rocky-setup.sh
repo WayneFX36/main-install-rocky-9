@@ -160,7 +160,7 @@ failregex = ^%(__prefix_line)sReceived disconnect from <HOST>: 11: .* \[preauth\
 ignoreregex =
 EOF
 
-# 8. Настройка автоблокировки при сканировании портов
+# 8. Настройка дополнительной защиты
 echo "8. Настройка дополнительной защиты..."
 cat > /etc/fail2ban/filter.d/port-scan.conf << EOF
 [Definition]
@@ -173,18 +173,29 @@ EOF
 # 9. Установка micro редактора
 echo "9. Установка micro редактора..."
 if ! command -v micro &> /dev/null; then
+    cd /tmp
     curl -s https://getmic.ro | bash
-    mv micro /usr/local/bin/
-    chmod +x /usr/local/bin/micro
-    echo "Micro установлен"
+    if [ -f ./micro ]; then
+        mv ./micro /usr/local/bin/micro
+        chmod +x /usr/local/bin/micro
+        echo "Micro установлен в /usr/local/bin/micro"
+    else
+        echo "Ошибка: micro не скачался"
+    fi
+    cd - > /dev/null
 else
-    echo "Micro уже установлен"
+    echo "Micro уже установлен: $(which micro)"
+fi
+
+if command -v micro &> /dev/null; then
+    echo "Micro версия: $(micro --version 2>&1 | head -1)"
+else
+    echo "Предупреждение: micro не установлен"
 fi
 
 # 10. Настройка сетевых параметров
 echo "10. Настройка сетевых параметров..."
 
-# Применяем параметры напрямую без функции
 for param in \
     "net.core.default_qdisc = fq" \
     "net.ipv4.tcp_congestion_control = bbr" \
@@ -215,20 +226,31 @@ sysctl net.ipv4.tcp_congestion_control
 # 11. Запуск и проверка сервисов
 echo "11. Запуск сервисов..."
 
-# Перезапускаем SSH с новым портом
 systemctl restart sshd
-
-# Запускаем fail2ban
 systemctl enable --now fail2ban
 
-# Проверяем статус fail2ban
 sleep 2
 fail2ban-client status sshd
 
 # 12. Дополнительные настройки
 echo "12. Дополнительные настройки..."
 
-# Отключаем вход по паролю (рекомендуется использовать SSH ключи)
+# Проверяем наличие SSH ключей перед отключением пароля
+if [ ! -f /root/.ssh/authorized_keys ] || [ ! -s /root/.ssh/authorized_keys ]; then
+    echo "ВНИМАНИЕ: Не найдены SSH ключи для root!"
+    echo "Рекомендуется сначала добавить SSH ключ, а потом отключать вход по паролю"
+    read -p "Добавить SSH ключ сейчас? (y/n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        mkdir -p /root/.ssh
+        chmod 700 /root/.ssh
+        echo "Вставьте публичный SSH ключ и нажмите Enter (для завершения ввода нажмите Ctrl+D):"
+        cat >> /root/.ssh/authorized_keys
+        chmod 600 /root/.ssh/authorized_keys
+        echo "SSH ключ добавлен"
+    fi
+fi
+
 read -p "Отключить вход по паролю для SSH? (y/n): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -236,6 +258,8 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
     systemctl restart sshd
     echo "Вход по паролю отключен"
+else
+    echo "Вход по паролю оставлен включенным"
 fi
 
 # Настраиваем логирование
@@ -273,7 +297,7 @@ firewall-cmd --list-ports
 echo ""
 echo "SSH порт: ${NEW_SSH_PORT}"
 echo "ВАЖНО! Не закрывайте текущую сессию, пока не проверите подключение на новом порту:"
-echo "ssh -p ${NEW_SSH_PORT} user@$(curl -s ifconfig.me)"
+echo "ssh -p ${NEW_SSH_PORT} root@$(curl -s ifconfig.me)"
 echo ""
 echo "Статус fail2ban:"
 fail2ban-client status
@@ -291,9 +315,9 @@ echo "Лимиты сети:"
 sysctl net.core.somaxconn net.core.netdev_max_backlog
 echo ""
 echo "========================================="
-echo "Логи fail2ban можно посмотреть командой:"
-echo "sudo fail2ban-client log sshd"
-echo ""
-echo "Для просмотра забаненных IP:"
-echo "sudo fail2ban-client status sshd"
+echo "Полезные команды:"
+echo "- Просмотр логов fail2ban: sudo fail2ban-client log sshd"
+echo "- Статус блокировок: sudo fail2ban-client status sshd"
+echo "- Разблокировать IP: sudo fail2ban-client unban <IP>"
+echo "- Просмотр логов атак: sudo tail -f /var/log/fail2ban.log"
 echo "========================================="
